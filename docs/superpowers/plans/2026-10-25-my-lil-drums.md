@@ -77,7 +77,7 @@ Copy-Item "$s\src\TalkingFace.hpp" "$d\src"
 {
   "slug": "MyLilDrums",
   "name": "My lil Drums",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "license": "MIT",
   "brand": "A_Development",
   "author": "Ari Klopfer",
@@ -2586,7 +2586,7 @@ In `dataToJson` add `json_object_set_new (j, "midi", midiOut.toJson());` and in 
 
 **Files:**
 - Create: `README.md`
-- Modify: `plugin.json` (version `1.0.0` only when Ari says to release)
+- Modify: `plugin.json` (version `2.0.0` (already set; Rack needs a 2.x.y version) to release)
 
 - [ ] **Step 1: Write `README.md`** (short): what it is (FPC-style drum sequencer for VCV Rack), a feature list matching the spec, the controls (click roll cells; right click erases; click row number or pad to select and hear it; pages 1-64; velocity lane; editor knobs follow the selected pad; GATE vs one-shot; CHOKE groups; right-click menu: load WAV, kits, factory beats, MIDI out), the pad map (kick, snare, closed hat, open hat, clap, rim, tom, crash), MIDI map (pad 1 = note 36, channel 10), the build section copied from `my-lil-looper/README.md` adapted to `make test` / `make dist`, license MIT.
 
