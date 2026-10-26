@@ -5,6 +5,7 @@
 #include "test_clock.h"
 #include "test_wav.h"
 #include "test_voice.h"
+#include "test_seq.h"
 
 int main()
 {
@@ -12,9 +13,11 @@ int main()
     testClock();
     testWav();
     testVoiceBasic();
+    testSequencer();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
+
 
 
 
