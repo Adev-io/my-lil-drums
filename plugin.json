@@ -1,0 +1,18 @@
+{
+  "slug": "MyLilDrums",
+  "name": "My lil Drums",
+  "version": "0.1.0",
+  "license": "MIT",
+  "brand": "A_Development",
+  "author": "Ari Klopfer",
+  "authorEmail": "",
+  "authorUrl": "",
+  "pluginUrl": "",
+  "manualUrl": "https://github.com/Adev-io/my-lil-drums#readme",
+  "sourceUrl": "https://github.com/Adev-io/my-lil-drums",
+  "donateUrl": "",
+  "changelogUrl": "",
+  "modules": [
+    { "slug": "Drums", "name": "Drums", "description": "FPC-style drum sequencer: 16 sample pads, 64-step piano roll, per-pad ADSR, filter and compressor, MIDI out", "tags": ["Sequencer", "Sampler", "Drum"] }
+  ]
+}
