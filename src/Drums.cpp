@@ -4,6 +4,7 @@
 #include "TalkingFace.hpp"
 #include "Widgets.hpp"
 #include "layout.hpp"
+#include "Beats.h"
 #include <osdialog.h>
 
 struct DrumsWidget : ModuleWidget
@@ -72,6 +73,14 @@ struct DrumsWidget : ModuleWidget
             if (path) { m->loadSample (m->sel.load(), path); std::free (path); }
         }));
         menu->addChild (createMenuItem ("Clear the selected pad's sample", "", [=] { m->loadSample (m->sel.load(), ""); }));
+        menu->addChild (createSubmenuItem ("Factory beat into this pattern", "", [=] (Menu* sub) {
+            for (int i = 0; i < NUM_BEATS; ++i)
+                sub->addChild (createMenuItem (BEATS[i].name, "", [=] {
+                    applyBeat (m->seq.pat[m->seq.cur], BEATS[i]);
+                    m->seq.setLength (16);
+                    m->params[Drums::LENGTH_PARAM].setValue (16.f);
+                }));
+        }));
         menu->addChild (createMenuItem ("Clear the current pattern", "", [=] { m->seq.pat[m->seq.cur].clear(); }));
     }
 };

@@ -10,6 +10,7 @@
 #include "test_comp.h"
 #include "test_filter.h"
 #include "test_adsr.h"
+#include "test_beats.h"
 
 int main()
 {
@@ -23,6 +24,7 @@ int main()
     testComp();
     testFilter();
     testAdsr();
+    testBeats();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
