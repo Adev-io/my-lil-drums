@@ -72,6 +72,8 @@ struct DrumsWidget : ModuleWidget
             osdialog_filters_free (filters);
             if (path) { m->loadSample (m->sel.load(), path); std::free (path); }
         }));
+        menu->addChild (createMenuLabel ("MIDI out: pad 1 = note 36, channel 10"));
+        app::appendMidiMenu (menu, &m->midiOut);
         menu->addChild (createSubmenuItem ("Kits", "", [=] (Menu* sub) {
             sub->addChild (createMenuItem ("Save kit as...", "", [=] {
                 system::createDirectories (m->kitDir());

@@ -39,6 +39,9 @@ struct Drums : Module
     int lastSel = -1;            // -1 forces the knobs to load from cfg on the first tick
     double stepSec = 0.125, sinceFire = 0;   // length of the last step, for gate mode
     bool haveFire = false;
+    midi::Output midiOut;
+    double offLeft[PADS] = {};   // seconds until the pending note-off; 0 = none
+    static constexpr int MIDI_BASE = 36, MIDI_CHANNEL = 9;   // pad 1 = GM kick, channel 10
 
     Drums()
     {
@@ -142,11 +145,24 @@ struct Drums : Module
         c.choke = (int) std::round (g (E_CHOKE));
     }
 
+    void sendNote (int p, int vel)   // vel 0 = note off
+    {
+        midi::Message msg;
+        msg.setStatus (vel ? 0x9 : 0x8);
+        msg.setChannel (MIDI_CHANNEL);
+        msg.setNote (MIDI_BASE + p);
+        msg.setValue (vel);
+        midiOut.sendMessage (msg);
+    }
+
     void hitPad (int p, int vel)
     {
         chokeGroup (voice, cfg, p);
         voice[p].trigger (slot[p].smp, vel, cfg[p], stepSec);
         flash[p] = 1.f;
+        if (offLeft[p] > 0.0) sendNote (p, 0);   // retrigger: close the old note first
+        sendNote (p, vel);
+        offLeft[p] = std::max (0.005, stepSec * 0.5);
     }
 
     void process (const ProcessArgs& a) override
@@ -193,6 +209,7 @@ struct Drums : Module
             voice[p].process (cfg[p], a.sampleRate, vl, vr);
             l += vl; r += vr;
             flash[p] = std::max (0.f, flash[p] - 6.f * a.sampleTime);
+            if (offLeft[p] > 0.0 && (offLeft[p] -= a.sampleTime) <= 0.0) { offLeft[p] = 0.0; sendNote (p, 0); }
         }
         const float g = 5.f * params[LEVEL_PARAM].getValue();   // +-1 sample = +-5 V
         outputs[OUT_L_OUTPUT].setVoltage (l * g);
@@ -294,11 +311,15 @@ struct Drums : Module
         json_object_set_new (j, "patterns", pats);
         json_object_set_new (j, "samples", samplesToJson());
         json_object_set_new (j, "pads", padsToJson());
+        json_object_set_new (j, "midi", midiOut.toJson());
         return j;
     }
 
+    void onReset() override { midiOut.reset(); }
+
     void dataFromJson (json_t* j) override
     {
+        if (json_t* mj = json_object_get (j, "midi")) midiOut.fromJson (mj);
         json_t* pats = json_object_get (j, "patterns");
         for (int i = 0; i < PATTERNS && json_is_array (pats) && i < (int) json_array_size (pats); ++i)
         {
