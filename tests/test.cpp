@@ -7,6 +7,7 @@
 #include "test_voice.h"
 #include "test_seq.h"
 #include "test_kit.h"
+#include "test_adsr.h"
 
 int main()
 {
@@ -16,6 +17,7 @@ int main()
     testVoiceBasic();
     testSequencer();
     testKit();
+    testAdsr();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
