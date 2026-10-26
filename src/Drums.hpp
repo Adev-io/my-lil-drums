@@ -208,6 +208,7 @@ struct Drums : Module
             float vl, vr;
             voice[p].process (cfg[p], a.sampleRate, vl, vr);
             l += vl; r += vr;
+            if (outputs[PAD_OUTPUT + p].isConnected()) outputs[PAD_OUTPUT + p].setVoltage (5.f * 0.5f * (vl + vr));
             flash[p] = std::max (0.f, flash[p] - 6.f * a.sampleTime);
             if (offLeft[p] > 0.0 && (offLeft[p] -= a.sampleTime) <= 0.0) { offLeft[p] = 0.0; sendNote (p, 0); }
         }
