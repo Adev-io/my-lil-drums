@@ -48,6 +48,16 @@ struct DrumsWidget : ModuleWidget
         addOutput (createOutputCentered<PJ301MPort> (at (L::OUT_R_OUTPUT), module, Drums::OUT_R_OUTPUT));
         for (int p = 0; p < PADS; ++p)
             addOutput (createOutputCentered<PJ301MPort> (at (L::PADOUT[p]), module, Drums::PAD_OUTPUT + p));
+
+        static const float* const edit[E_N] = { L::VOL_PARAM, L::PAN_PARAM, L::PITCH_PARAM, L::ATK_PARAM, L::DEC_PARAM, L::SUS_PARAM, L::REL_PARAM,
+            L::MODE_PARAM, L::LP_PARAM, L::HP_PARAM, L::THR_PARAM, L::RATIO_PARAM, L::CATK_PARAM, L::CREL_PARAM, L::MAKEUP_PARAM, L::CHOKE_PARAM };
+        for (int i = 0; i < E_N; ++i)
+        {
+            if (i == E_MODE)
+                addParam (createLightParamCentered<VCVLightLatch<MediumSimpleLight<LimeLight>>> (at (edit[i]), module, Drums::EDIT_PARAM + i, Drums::MODE_LIGHT));
+            else
+                addParam (createParamCentered<Rogan1PSWhite> (at (edit[i]), module, Drums::EDIT_PARAM + i));
+        }
     }
 
     void appendContextMenu (Menu* menu) override

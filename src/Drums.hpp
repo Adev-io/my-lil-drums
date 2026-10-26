@@ -35,6 +35,10 @@ struct Drums : Module
     FaceTap face;
     dsp::SchmittTrigger clockTrig, resetTrig;
     bool wasRun = false;
+    PadCfg cfg[PADS];            // the saved truth for every pad
+    int lastSel = -1;            // -1 forces the knobs to load from cfg on the first tick
+    double stepSec = 0.125, sinceFire = 0;   // length of the last step, for gate mode
+    bool haveFire = false;
 
     Drums()
     {
@@ -55,6 +59,23 @@ struct Drums : Module
             audition[p] = false;
             configOutput (PAD_OUTPUT + p, "Pad " + std::to_string (p + 1));
         }
+        const int E = EDIT_PARAM;
+        configParam (E + E_VOL, 0.f, 2.f, 1.f, "Pad volume", "%", 0.f, 100.f);
+        configParam (E + E_PAN, -1.f, 1.f, 0.f, "Pad pan");
+        configParam (E + E_PITCH, -12.f, 12.f, 0.f, "Pad pitch", " st");
+        configParam (E + E_ATK, 0.0001f, 1.f, 0.001f, "Attack", " ms", 0.f, 1000.f);
+        configParam (E + E_DEC, 0.001f, 2.f, 0.2f, "Decay", " ms", 0.f, 1000.f);
+        configParam (E + E_SUS, 0.f, 1.f, 1.f, "Sustain", "%", 0.f, 100.f);
+        configParam (E + E_REL, 0.001f, 2.f, 0.05f, "Release", " ms", 0.f, 1000.f);
+        configSwitch (E + E_MODE, 0.f, 1.f, 0.f, "Pad mode", { "One-shot", "Gate (one step)" });
+        configParam (E + E_LP, std::log2 (20.f), std::log2 (20000.f), std::log2 (20000.f), "Low-pass", " Hz", 2.f);
+        configParam (E + E_HP, std::log2 (20.f), std::log2 (20000.f), std::log2 (20.f), "High-pass", " Hz", 2.f);
+        configParam (E + E_THR, -60.f, 0.f, 0.f, "Compressor threshold", " dB");
+        configParam (E + E_RATIO, 1.f, 20.f, 1.f, "Compressor ratio", ":1");
+        configParam (E + E_CATK, 0.1f, 100.f, 5.f, "Compressor attack", " ms");
+        configParam (E + E_CREL, 10.f, 1000.f, 80.f, "Compressor release", " ms");
+        configParam (E + E_MAKEUP, 0.f, 24.f, 0.f, "Compressor makeup", " dB");
+        configParam (E + E_CHOKE, 0.f, 8.f, 0.f, "Choke group (0 = none)")->snapEnabled = true;
         loadStarterKit();
     }
 
@@ -100,15 +121,42 @@ struct Drums : Module
         }
     }
 
+    void loadEdit (int p)
+    {
+        const PadCfg& c = cfg[p];
+        const int E = EDIT_PARAM;
+        const float v[E_N] = { c.vol, c.pan, c.pitch, c.atk, c.dec, c.sus, c.rel, c.gateMode ? 1.f : 0.f,
+                               std::log2 (c.lp), std::log2 (c.hp), c.thr, c.ratio, c.catk, c.crel, c.makeup, (float) c.choke };
+        for (int i = 0; i < E_N; ++i) params[E + i].setValue (v[i]);
+    }
+    void storeEdit (int p)
+    {
+        PadCfg& c = cfg[p];
+        const int E = EDIT_PARAM;
+        auto g = [&] (int i) { return params[E + i].getValue(); };
+        c.vol = g (E_VOL); c.pan = g (E_PAN); c.pitch = g (E_PITCH);
+        c.atk = g (E_ATK); c.dec = g (E_DEC); c.sus = g (E_SUS); c.rel = g (E_REL);
+        c.gateMode = g (E_MODE) > 0.5f;
+        c.lp = std::exp2 (g (E_LP)); c.hp = std::exp2 (g (E_HP));
+        c.thr = g (E_THR); c.ratio = g (E_RATIO); c.catk = g (E_CATK); c.crel = g (E_CREL); c.makeup = g (E_MAKEUP);
+        c.choke = (int) std::round (g (E_CHOKE));
+    }
+
     void hitPad (int p, int vel)
     {
-        voice[p].trigger (slot[p].smp, vel);
+        chokeGroup (voice, cfg, p);
+        voice[p].trigger (slot[p].smp, vel, cfg[p], stepSec);
         flash[p] = 1.f;
     }
 
     void process (const ProcessArgs& a) override
     {
         if (dirty.exchange (false)) adopt();
+        const int s = sel.load();
+        if (s != lastSel) { loadEdit (s); lastSel = s; }
+        else storeEdit (s);
+        lights[MODE_LIGHT].setBrightness (cfg[s].gateMode ? 1.f : 0.f);
+        sinceFire += a.sampleTime;
 
         const int pi = (int) std::round (params[PATTERN_PARAM].getValue());
         if (pi != seq.cur) { seq.select (pi); params[LENGTH_PARAM].setValue ((float) seq.pat[pi].length); }
@@ -130,6 +178,9 @@ struct Drums : Module
         else if (run) fired = seq.clk.tick (a.sampleTime);
         if (fired)
         {
+            if (haveFire) stepSec = sinceFire;   // measured, so it follows an external clock and swing
+            haveFire = true;
+            sinceFire = 0;
             seq.fire();
             for (int p = 0; p < PADS; ++p) if (seq.hit[p]) hitPad (p, seq.hit[p]);
         }
@@ -139,7 +190,7 @@ struct Drums : Module
         for (int p = 0; p < PADS; ++p)
         {
             float vl, vr;
-            voice[p].process (a.sampleRate, vl, vr);
+            voice[p].process (cfg[p], a.sampleRate, vl, vr);
             l += vl; r += vr;
             flash[p] = std::max (0.f, flash[p] - 6.f * a.sampleTime);
         }
@@ -178,6 +229,18 @@ struct Drums : Module
         json_t* smp = json_array();
         for (int p = 0; p < PADS; ++p) json_array_append_new (smp, json_string (packPath (slot[p].path).c_str()));
         json_object_set_new (j, "samples", smp);
+        json_t* pads = json_array();
+        for (int p = 0; p < PADS; ++p)
+        {
+            const PadCfg& c = cfg[p];
+            json_t* o = json_object();
+            const std::pair<const char*, float> kv[] = { { "vol", c.vol }, { "pan", c.pan }, { "pitch", c.pitch }, { "atk", c.atk }, { "dec", c.dec },
+                { "sus", c.sus }, { "rel", c.rel }, { "lp", c.lp }, { "hp", c.hp }, { "thr", c.thr }, { "ratio", c.ratio }, { "catk", c.catk },
+                { "crel", c.crel }, { "makeup", c.makeup }, { "gate", c.gateMode ? 1.f : 0.f }, { "choke", (float) c.choke } };
+            for (const auto& e : kv) json_object_set_new (o, e.first, json_real (e.second));
+            json_array_append_new (pads, o);
+        }
+        json_object_set_new (j, "pads", pads);
         return j;
     }
 
@@ -199,5 +262,19 @@ struct Drums : Module
         for (int p = 0; p < PADS && json_is_array (smp) && p < (int) json_array_size (smp); ++p)
             if (json_t* s = json_array_get (smp, p))
                 if (json_is_string (s)) loadSample (p, unpackPath (json_string_value (s)));
+        json_t* pads = json_object_get (j, "pads");
+        for (int p = 0; p < PADS && json_is_array (pads) && p < (int) json_array_size (pads); ++p)
+        {
+            json_t* o = json_array_get (pads, p);
+            PadCfg& c = cfg[p];
+            auto num = [&] (const char* k, float& dst) { if (json_t* v = json_object_get (o, k)) if (json_is_number (v)) dst = (float) json_number_value (v); };
+            float gate = c.gateMode ? 1.f : 0.f, choke = (float) c.choke;
+            num ("vol", c.vol); num ("pan", c.pan); num ("pitch", c.pitch); num ("atk", c.atk); num ("dec", c.dec); num ("sus", c.sus);
+            num ("rel", c.rel); num ("lp", c.lp); num ("hp", c.hp); num ("thr", c.thr); num ("ratio", c.ratio); num ("catk", c.catk);
+            num ("crel", c.crel); num ("makeup", c.makeup); num ("gate", gate); num ("choke", choke);
+            c.gateMode = gate > 0.5f;
+            c.choke = (int) clamp (choke, 0.f, 8.f);
+        }
+        lastSel = -1;   // reload the knobs from cfg on the next tick
     }
 };
