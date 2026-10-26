@@ -2,10 +2,13 @@
 // Author: Ari Klopfer / A_Development. MIT
 #include "check.h"
 #include "test_pattern.h"
+#include "test_clock.h"
 
 int main()
 {
     testPattern();
+    testClock();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
+
