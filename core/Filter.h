@@ -23,10 +23,18 @@ struct PadFilter
 
     void process (float& l, float& r, float sr)
     {
-        const float al = onePoleCoef (lpHz, sr), ah = onePoleCoef (hpHz, sr);
-        l = lpL.process (l, al);
-        r = lpR.process (r, al);
-        l -= hpL.process (l, ah);   // high-pass = input minus its own low-pass
-        r -= hpR.process (r, ah);
+        // Knobs at their end stops are bypassed: a 20 Hz high-pass would otherwise bleed DC (and quiet sample bodies) away.
+        if (lpHz < 20000.f)
+        {
+            const float al = onePoleCoef (lpHz, sr);
+            l = lpL.process (l, al);
+            r = lpR.process (r, al);
+        }
+        if (hpHz > 20.f)
+        {
+            const float ah = onePoleCoef (hpHz, sr);
+            l -= hpL.process (l, ah);   // high-pass = input minus its own low-pass
+            r -= hpR.process (r, ah);
+        }
     }
 };

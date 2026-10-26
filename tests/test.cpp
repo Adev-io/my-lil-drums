@@ -16,7 +16,8 @@ int main()
     testPattern();
     testClock();
     testWav();
-    testVoiceBasic();
+    testVoice();
+    testChoke();
     testSequencer();
     testKit();
     testComp();
