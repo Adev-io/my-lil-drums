@@ -72,6 +72,25 @@ struct DrumsWidget : ModuleWidget
             osdialog_filters_free (filters);
             if (path) { m->loadSample (m->sel.load(), path); std::free (path); }
         }));
+        menu->addChild (createSubmenuItem ("Kits", "", [=] (Menu* sub) {
+            sub->addChild (createMenuItem ("Save kit as...", "", [=] {
+                system::createDirectories (m->kitDir());
+                osdialog_filters* filters = osdialog_filters_parse ("Kit:json");
+                char* path = osdialog_file (OSDIALOG_SAVE, m->kitDir().c_str(), "kit.json", filters);
+                osdialog_filters_free (filters);
+                if (path)
+                {
+                    std::string p = path;
+                    std::free (path);
+                    if (system::getExtension (p) != ".json") p += ".json";
+                    m->saveKit (p);
+                }
+            }));
+            sub->addChild (new MenuSeparator);
+            for (const std::string& f : system::getEntries (m->kitDir()))
+                if (system::getExtension (f) == ".json")
+                    sub->addChild (createMenuItem (system::getStem (f), "", [=] { m->loadKit (f); }));
+        }));
         menu->addChild (createMenuItem ("Clear the selected pad's sample", "", [=] { m->loadSample (m->sel.load(), ""); }));
         menu->addChild (createSubmenuItem ("Factory beat into this pattern", "", [=] (Menu* sub) {
             for (int i = 0; i < NUM_BEATS; ++i)

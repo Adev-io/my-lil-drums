@@ -212,6 +212,72 @@ struct Drums : Module
         return p.compare (0, 8, "@plugin/") == 0 ? asset::plugin (pluginInstance, p.substr (8)) : p;
     }
 
+    json_t* padsToJson() const
+    {
+        json_t* pads = json_array();
+        for (int p = 0; p < PADS; ++p)
+        {
+            const PadCfg& c = cfg[p];
+            json_t* o = json_object();
+            const std::pair<const char*, float> kv[] = { { "vol", c.vol }, { "pan", c.pan }, { "pitch", c.pitch }, { "atk", c.atk }, { "dec", c.dec },
+                { "sus", c.sus }, { "rel", c.rel }, { "lp", c.lp }, { "hp", c.hp }, { "thr", c.thr }, { "ratio", c.ratio }, { "catk", c.catk },
+                { "crel", c.crel }, { "makeup", c.makeup }, { "gate", c.gateMode ? 1.f : 0.f }, { "choke", (float) c.choke } };
+            for (const auto& e : kv) json_object_set_new (o, e.first, json_real (e.second));
+            json_array_append_new (pads, o);
+        }
+        return pads;
+    }
+    void padsFromJson (json_t* pads)
+    {
+        for (int p = 0; p < PADS && json_is_array (pads) && p < (int) json_array_size (pads); ++p)
+        {
+            json_t* o = json_array_get (pads, p);
+            PadCfg& c = cfg[p];
+            auto num = [&] (const char* k, float& dst) { if (json_t* v = json_object_get (o, k)) if (json_is_number (v)) dst = (float) json_number_value (v); };
+            float gate = c.gateMode ? 1.f : 0.f, choke = (float) c.choke;
+            num ("vol", c.vol); num ("pan", c.pan); num ("pitch", c.pitch); num ("atk", c.atk); num ("dec", c.dec); num ("sus", c.sus);
+            num ("rel", c.rel); num ("lp", c.lp); num ("hp", c.hp); num ("thr", c.thr); num ("ratio", c.ratio); num ("catk", c.catk);
+            num ("crel", c.crel); num ("makeup", c.makeup); num ("gate", gate); num ("choke", choke);
+            c.gateMode = gate > 0.5f;
+            c.choke = (int) clamp (choke, 0.f, 8.f);
+        }
+        lastSel = -1;
+    }
+    json_t* samplesToJson() const
+    {
+        json_t* smp = json_array();
+        for (int p = 0; p < PADS; ++p) json_array_append_new (smp, json_string (packPath (slot[p].path).c_str()));
+        return smp;
+    }
+    void samplesFromJson (json_t* smp)
+    {
+        for (int p = 0; p < PADS && json_is_array (smp) && p < (int) json_array_size (smp); ++p)
+            if (json_t* s = json_array_get (smp, p))
+                if (json_is_string (s)) loadSample (p, unpackPath (json_string_value (s)));
+    }
+    std::string kitDir() const { return asset::user ("MyLilDrums/kits"); }
+    bool saveKit (const std::string& path)
+    {
+        json_t* j = json_object();
+        json_object_set_new (j, "samples", samplesToJson());
+        json_object_set_new (j, "pads", padsToJson());
+        FILE* f = std::fopen (path.c_str(), "w");   // ponytail: ANSI path; Rack's own dialogs hand back ANSI-safe paths in practice
+        const bool ok = f && json_dumpf (j, f, JSON_INDENT (1)) == 0;
+        if (f) std::fclose (f);
+        json_decref (j);
+        return ok;
+    }
+    bool loadKit (const std::string& path)
+    {
+        json_error_t err;
+        json_t* j = json_load_file (path.c_str(), 0, &err);
+        if (! j) return false;
+        samplesFromJson (json_object_get (j, "samples"));
+        padsFromJson (json_object_get (j, "pads"));
+        json_decref (j);
+        return true;
+    }
+
     json_t* dataToJson() override
     {
         json_t* j = json_object();
@@ -226,21 +292,8 @@ struct Drums : Module
             json_array_append_new (pats, o);
         }
         json_object_set_new (j, "patterns", pats);
-        json_t* smp = json_array();
-        for (int p = 0; p < PADS; ++p) json_array_append_new (smp, json_string (packPath (slot[p].path).c_str()));
-        json_object_set_new (j, "samples", smp);
-        json_t* pads = json_array();
-        for (int p = 0; p < PADS; ++p)
-        {
-            const PadCfg& c = cfg[p];
-            json_t* o = json_object();
-            const std::pair<const char*, float> kv[] = { { "vol", c.vol }, { "pan", c.pan }, { "pitch", c.pitch }, { "atk", c.atk }, { "dec", c.dec },
-                { "sus", c.sus }, { "rel", c.rel }, { "lp", c.lp }, { "hp", c.hp }, { "thr", c.thr }, { "ratio", c.ratio }, { "catk", c.catk },
-                { "crel", c.crel }, { "makeup", c.makeup }, { "gate", c.gateMode ? 1.f : 0.f }, { "choke", (float) c.choke } };
-            for (const auto& e : kv) json_object_set_new (o, e.first, json_real (e.second));
-            json_array_append_new (pads, o);
-        }
-        json_object_set_new (j, "pads", pads);
+        json_object_set_new (j, "samples", samplesToJson());
+        json_object_set_new (j, "pads", padsToJson());
         return j;
     }
 
@@ -258,23 +311,7 @@ struct Drums : Module
                     if (json_is_string (row)) rowFromHex (json_string_value (row), seq.pat[i].vel[p]);
         }
         seq.clk.length = seq.pat[seq.cur].length;
-        json_t* smp = json_object_get (j, "samples");
-        for (int p = 0; p < PADS && json_is_array (smp) && p < (int) json_array_size (smp); ++p)
-            if (json_t* s = json_array_get (smp, p))
-                if (json_is_string (s)) loadSample (p, unpackPath (json_string_value (s)));
-        json_t* pads = json_object_get (j, "pads");
-        for (int p = 0; p < PADS && json_is_array (pads) && p < (int) json_array_size (pads); ++p)
-        {
-            json_t* o = json_array_get (pads, p);
-            PadCfg& c = cfg[p];
-            auto num = [&] (const char* k, float& dst) { if (json_t* v = json_object_get (o, k)) if (json_is_number (v)) dst = (float) json_number_value (v); };
-            float gate = c.gateMode ? 1.f : 0.f, choke = (float) c.choke;
-            num ("vol", c.vol); num ("pan", c.pan); num ("pitch", c.pitch); num ("atk", c.atk); num ("dec", c.dec); num ("sus", c.sus);
-            num ("rel", c.rel); num ("lp", c.lp); num ("hp", c.hp); num ("thr", c.thr); num ("ratio", c.ratio); num ("catk", c.catk);
-            num ("crel", c.crel); num ("makeup", c.makeup); num ("gate", gate); num ("choke", choke);
-            c.gateMode = gate > 0.5f;
-            c.choke = (int) clamp (choke, 0.f, 8.f);
-        }
-        lastSel = -1;   // reload the knobs from cfg on the next tick
+        samplesFromJson (json_object_get (j, "samples"));
+        padsFromJson (json_object_get (j, "pads"));   // also forces the knobs to reload from cfg
     }
 };
